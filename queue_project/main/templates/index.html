@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h2 class="mb-1">Запис в електронну чергу</h2>
+    <div class="text-muted">Оберіть послугу, дату та доступний час</div>
+  </div>
+  <a class="btn btn-outline-secondary" href="/my/tickets">Перейти до моїх записів</a>
+</div>
+
+{% if error %}
+  <div class="alert alert-danger">{{ error }}</div>
+{% endif %}
+
+<div class="row g-3">
+
+  <div class="col-12 col-lg-7">
+    <div class="card card-soft p-4">
+
+      <form method="post" action="/tickets/create">
+        {% csrf_token %}
+
+        <div class="mb-3">
+          <label class="form-label">Послуга</label>
+
+          <div class="d-grid gap-2">
+            {% for s in services %}
+              <label class="border rounded p-3 service-card">
+                <input type="radio"
+                       name="service_id"
+                       value="{{ s.id }}"
+                       required>
+
+                <div>
+                  <div class="fw-semibold">{{ s.name }}</div>
+                  <div class="text-muted small">{{ s.description }}</div>
+                </div>
+              </label>
+            {% empty %}
+              <div class="text-muted">Немає доступних послуг</div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Дата</label>
+          <select name="date" id="dateSelect" class="form-select" required>
+            {% for d in dates %}
+              <option value="{{ d }}">{{ d }}</option>
+            {% empty %}
+              <option value="">Немає дат</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Час</label>
+
+          <div id="timeButtons" class="d-flex flex-wrap gap-2"></div>
+
+          <input type="hidden" name="time" id="selectedTime" required>
+        </div>
+
+        <div class="d-flex gap-2 mt-4">
+          <button class="btn btn-primary">Записатись</button>
+          <button type="button"
+                  class="btn btn-outline-secondary"
+                  onclick="refreshTimes()">
+            Оновити час
+          </button>
+        </div>
+
+      </form>
+
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-5">
+    <div class="card card-soft p-4">
+      <h5 class="mb-3">Правила запису</h5>
+      <ul class="mb-0 text-muted">
+        <li>Робочі години: 08:00–17:00 (останній слот 16:50)</li>
+        <li>Крок: 10 хв</li>
+        <li>Вихідні: субота/неділя — недоступні</li>
+        <li>Запис мінімум за 30 хв наперед</li>
+        <li>Зайняті слоти не показуються</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+<style>
+  .service-card {
+    display: flex;
+    gap: 10px;
+    cursor: pointer;
+    transition: 0.2s;
+    align-items: flex-start;
+  }
+
+  .service-card:hover {
+    background: #f8f9fa;
+  }
+
+  .service-card input {
+    margin-top: 5px;
+  }
+
+  #timeButtons button.active {
+    background: #0d6efd;
+    color: white;
+  }
+</style>
+
+<script>
+  function renderTimes(times) {
+    const container = document.getElementById("timeButtons");
+    const input = document.getElementById("selectedTime");
+
+    container.innerHTML = "";
+    input.value = "";
+
+    (times || []).forEach(t => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn btn-outline-primary btn-sm";
+      btn.textContent = t;
+
+      btn.onclick = () => {
+        input.value = t;
+
+        document.querySelectorAll("#timeButtons button")
+          .forEach(b => b.classList.remove("active"));
+
+        btn.classList.add("active");
+      };
+
+      container.appendChild(btn);
+    });
+
+    if (times.length === 0) {
+      container.innerHTML = "<span class='text-muted'>Немає вільних слотів</span>";
+    }
+  }
+
+  async function refreshTimes() {
+    const date = document.getElementById("dateSelect").value;
+    if (!date) return;
+
+    const res = await fetch(`/free-times?date=${encodeURIComponent(date)}`);
+    const data = await res.json();
+
+    renderTimes(data.times || []);
+  }
+
+  document.getElementById("dateSelect").addEventListener("change", refreshTimes);
+  window.onload = refreshTimes;
+</script>
+
+{% endblock %}
