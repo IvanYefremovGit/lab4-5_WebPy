@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from .models import User, Service, Ticket
 from datetime import datetime, timedelta, time as dtime
+from .forms import LoginForm, ServiceForm
 
 STEP_MINUTES = 10
 LEAD_MINUTES = 30
@@ -85,20 +86,33 @@ def build_free_times(date_str):
     return free_times
 
 
+
 def login_view(request):
     if request.method == "POST":
-        user = User.objects.filter(
-            username=request.POST.get("username"),
-            password=request.POST.get("password")
-        ).first()
+        form = LoginForm(request.POST)
 
-        if user:
-            request.session["user_id"] = user.id
-            return redirect("/admin" if user.role == "admin" else "/")
+        if form.is_valid():
+            username = form.cleaned_data["username"]
+            password = form.cleaned_data["password"]
 
-        return render(request, "login.html", {"error": "Невірні дані"})
+            user = User.objects.filter(
+                username=username,
+                password=password
+            ).first()
 
-    return render(request, "login.html")
+            if user:
+                request.session["user_id"] = user.id
+                return redirect("/admin" if user.role == "admin" else "/")
+
+            return render(request, "login.html", {
+                "form": form,
+                "error": "Невірні дані"
+            })
+
+    else:
+        form = LoginForm()
+
+    return render(request, "login.html", {"form": form})
 
 
 def logout_view(request):
@@ -217,7 +231,6 @@ def cancel_ticket(request, id):
     return redirect("/my/tickets")
 
 
-
 def admin_dashboard(request):
     user = get_user(request)
     if not user or user.role != "admin":
@@ -270,26 +283,33 @@ def admin_services(request):
     })
 
 
+from .forms import ServiceForm
+
 def create_service(request):
     user = get_user(request)
 
     if not user or user.role != "admin":
         return redirect("/login")
 
-    if request.method == "GET":
-        return render(request, "service_form.html", {
-            "service": None,
-            "user": user
-        })
-
     if request.method == "POST":
-        Service.objects.create(
-            name=request.POST.get("name"),
-            description=request.POST.get("description"),
-            is_active=bool(request.POST.get("is_active"))
-        )
+        form = ServiceForm(request.POST)
 
-        return redirect("/admin/services")
+        if form.is_valid():
+            Service.objects.create(
+                name=form.cleaned_data["name"],
+                description=form.cleaned_data["description"],
+                is_active=form.cleaned_data["is_active"]
+            )
+            return redirect("/admin/services")
+
+    else:
+        form = ServiceForm()
+
+    return render(request, "service_form.html", {
+        "form": form,
+        "service": None,
+        "user": user
+    })
 
 
 def edit_service(request, id):
@@ -300,13 +320,27 @@ def edit_service(request, id):
     s = Service.objects.get(id=id)
 
     if request.method == "POST":
-        s.name = request.POST.get("name")
-        s.description = request.POST.get("description")
-        s.is_active = bool(request.POST.get("is_active"))
-        s.save()
-        return redirect("/admin/services")
+        form = ServiceForm(request.POST)
 
-    return render(request, "service_form.html", {"service": s, "user": user})
+        if form.is_valid():
+            s.name = form.cleaned_data["name"]
+            s.description = form.cleaned_data["description"]
+            s.is_active = form.cleaned_data["is_active"]
+            s.save()
+            return redirect("/admin/services")
+
+    else:
+        form = ServiceForm(initial={
+            "name": s.name,
+            "description": s.description,
+            "is_active": s.is_active
+        })
+
+    return render(request, "service_form.html", {
+        "form": form,
+        "service": s,
+        "user": user
+    })
 
 
 def delete_service(request, id):
